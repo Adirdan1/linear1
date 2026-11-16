@@ -388,10 +388,9 @@ main { max-width: 1480px; margin: 0 auto; padding: 0 40px 34px; }
 .answer-key { margin-bottom: 12px; padding: 12px 14px; border-radius: 10px; background: var(--surface); color: var(--ink); font-size: .95rem; }
 .answer-key strong { color: var(--success); font-size: 1.15rem; }
 .answer-key small { display: block; margin-top: 4px; color: var(--muted); font-size: .8rem; }
-.similar-block { margin-top: 16px; padding-top: 14px; border-top: 1px dashed var(--accent); }
-.similar-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
-.similar-heading h3 { margin: 0; color: var(--ink); font-size: .98rem; }
-.similar-heading span { color: var(--muted); font-size: .76rem; }
+.similar-block { margin-top: 22px; }
+#toggle-similar { flex: 0 0 auto; scroll-margin-top: 16px; }
+.similar-content { margin-top: 12px; padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface-2); }
 .similar-list { display: grid; gap: 8px; }
 .similar-card { display: grid; gap: 5px; width: 100%; padding: 11px 13px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); font: inherit; text-align: right; cursor: pointer; }
 .similar-card:hover { border-color: var(--accent); }
@@ -802,11 +801,6 @@ body.has-overlay .toast { bottom: calc(92px + env(safe-area-inset-bottom)); }
             <div class="answer-key" id="answer-key" hidden></div>
             <div id="solution-images"></div>
             <details class="text-fallback" id="solution-text-details"><summary>הצגת טקסט הפתרון (לחיפוש / נגישות)</summary><div class="fallback-text" id="solution-text"></div></details>
-            <div class="similar-block" id="similar-block" aria-labelledby="similar-title">
-              <div class="similar-heading"><h3 id="similar-title">עכשיו נסו לבד: שאלה דומה</h3><span>מאותו נושא, מתוך מאגר השאלות</span></div>
-              <div class="similar-list" id="similar-list"></div>
-              <button class="button button-soft similar-more" id="similar-more" type="button" hidden>עוד שאלות דומות</button>
-            </div>
           </div>
         </section>
 
@@ -820,6 +814,20 @@ body.has-overlay .toast { bottom: calc(92px + env(safe-area-inset-bottom)); }
           </div>
           <div class="references-content" id="references-content" hidden>
             <div class="reference-groups" id="modal-references"></div>
+          </div>
+        </section>
+
+        <section class="similar-block" aria-labelledby="similar-label">
+          <div class="block-heading reference-heading">
+            <div class="reference-heading-main">
+              <p class="section-label" id="similar-label">שאלות דומות</p>
+              <span class="reference-subtitle">שאלות באותו נושא מתוך מאגר השאלות · לנסות לבד אחרי שראיתם את הפתרון</span>
+            </div>
+            <button class="button button-secondary" id="toggle-similar" type="button" aria-expanded="false" aria-controls="similar-content">הצגת שאלות דומות</button>
+          </div>
+          <div class="similar-content" id="similar-content" hidden>
+            <div class="similar-list" id="similar-list"></div>
+            <button class="button button-soft similar-more" id="similar-more" type="button" hidden>עוד שאלות דומות</button>
           </div>
         </section>
 
@@ -2043,6 +2051,8 @@ window.EMBEDDED_INDEX = {"assets/questions/2026a-moed-81-q1-א/question-1.png":"
     solutionTextDetails: $('#solution-text-details'),
     solutionText: $('#solution-text'),
     similarList: $('#similar-list'),
+    toggleSimilar: $('#toggle-similar'),
+    similarContent: $('#similar-content'),
     similarMore: $('#similar-more'),
     toggleReferences: $('#toggle-references'),
     referencesContent: $('#references-content'),
@@ -2659,8 +2669,7 @@ window.EMBEDDED_INDEX = {"assets/questions/2026a-moed-81-q1-א/question-1.png":"
     els.solutionTextDetails.open = false;
     els.solutionText.replaceChildren();
     els.solutionText.dataset.rendered = '';
-    els.similarList.replaceChildren();
-    els.similarMore.hidden = true;
+    showSimilar(false);
     els.toggleSolution.textContent = 'הצגת פתרון';
     els.toggleSolution.setAttribute('aria-expanded', 'false');
     if (q.answer_choice) {
@@ -2838,13 +2847,26 @@ window.EMBEDDED_INDEX = {"assets/questions/2026a-moed-81-q1-א/question-1.png":"
     els.similarMore.hidden = similarShown >= similarRanked.length;
   }
 
+  function showSimilar(visible, { scroll = false } = {}) {
+    if (visible) renderSimilar(true);
+    else {
+      els.similarList.replaceChildren();
+      els.similarMore.hidden = true;
+    }
+    els.similarContent.hidden = !visible;
+    els.toggleSimilar.textContent = visible ? 'הסתרת שאלות דומות' : 'הצגת שאלות דומות';
+    els.toggleSimilar.setAttribute('aria-expanded', String(visible));
+    if (visible && scroll) {
+      window.requestAnimationFrame(() => els.toggleSimilar.scrollIntoView({ block: 'start', behavior: prefersReducedMotion() ? 'auto' : 'smooth' }));
+    }
+  }
+
   function showSolution(show) {
     const q = currentQuestion();
     if (!q) return;
     const visible = typeof show === 'boolean' ? show : els.solution.hidden;
     if (visible && !els.solutionImages.childElementCount) {
       els.solutionImages.append(createDocStack(q.solution_images, `הפתרון המקורי · ${q.question_label}`, { inkFor: { qid: q.id, prefix: 's' } }));
-      renderSimilar(true);
     }
     els.solution.hidden = !visible;
     els.toggleSolution.textContent = visible ? 'הסתרת פתרון' : 'הצגת פתרון';
@@ -3662,6 +3684,7 @@ window.EMBEDDED_INDEX = {"assets/questions/2026a-moed-81-q1-א/question-1.png":"
     els.randomInModal.addEventListener('click', () => openRandom(state.nav.ids, state.nav.label));
     els.toggleSolution.addEventListener('click', () => showSolution());
     els.similarMore.addEventListener('click', () => renderSimilar(false));
+    els.toggleSimilar.addEventListener('click', () => showSimilar(els.similarContent.hidden, { scroll: true }));
     els.promptTextDetails.addEventListener('toggle', () => renderFallbackText(els.promptTextDetails, els.promptText, currentQuestion()?.prompt, 'אין טקסט חלופי לשאלה זו.'));
     els.solutionTextDetails.addEventListener('toggle', () => renderFallbackText(els.solutionTextDetails, els.solutionText, currentQuestion()?.solution, 'אין טקסט חלופי לפתרון זה.'));
     els.notes.addEventListener('input', () => {
