@@ -388,6 +388,20 @@ main { max-width: 1480px; margin: 0 auto; padding: 0 40px 34px; }
 .answer-key { margin-bottom: 12px; padding: 12px 14px; border-radius: 10px; background: var(--surface); color: var(--ink); font-size: .95rem; }
 .answer-key strong { color: var(--success); font-size: 1.15rem; }
 .answer-key small { display: block; margin-top: 4px; color: var(--muted); font-size: .8rem; }
+.similar-block { margin-top: 16px; padding-top: 14px; border-top: 1px dashed var(--accent); }
+.similar-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.similar-heading h3 { margin: 0; color: var(--ink); font-size: .98rem; }
+.similar-heading span { color: var(--muted); font-size: .76rem; }
+.similar-list { display: grid; gap: 8px; }
+.similar-card { display: grid; gap: 5px; width: 100%; padding: 11px 13px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); font: inherit; text-align: right; cursor: pointer; }
+.similar-card:hover { border-color: var(--accent); }
+.similar-card:focus-visible { outline: 0; border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus); }
+.similar-card-top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: .84rem; font-weight: 750; }
+.similar-card-top .similar-done { color: var(--success); font-size: .76rem; }
+.similar-card-preview { overflow: hidden; color: var(--muted); font-size: .8rem; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.similar-card .chip-row { display: flex; flex-wrap: wrap; gap: 4px; }
+.similar-more { margin-top: 10px; }
+.similar-empty { margin: 0; color: var(--muted); font-size: .84rem; }
 .reference-block { margin-top: 22px; }
 .reference-heading { align-items: flex-start; margin-bottom: 0; }
 .reference-heading-main { display: grid; gap: 4px; }
@@ -788,6 +802,11 @@ body.has-overlay .toast { bottom: calc(92px + env(safe-area-inset-bottom)); }
             <div class="answer-key" id="answer-key" hidden></div>
             <div id="solution-images"></div>
             <details class="text-fallback" id="solution-text-details"><summary>הצגת טקסט הפתרון (לחיפוש / נגישות)</summary><div class="fallback-text" id="solution-text"></div></details>
+            <div class="similar-block" id="similar-block" aria-labelledby="similar-title">
+              <div class="similar-heading"><h3 id="similar-title">עכשיו נסו לבד: שאלה דומה</h3><span>מאותו נושא, מתוך מאגר השאלות</span></div>
+              <div class="similar-list" id="similar-list"></div>
+              <button class="button button-soft similar-more" id="similar-more" type="button" hidden>עוד שאלות דומות</button>
+            </div>
           </div>
         </section>
 
@@ -2023,6 +2042,8 @@ window.EMBEDDED_INDEX = {"assets/questions/2026a-moed-81-q1-א/question-1.png":"
     solutionImages: $('#solution-images'),
     solutionTextDetails: $('#solution-text-details'),
     solutionText: $('#solution-text'),
+    similarList: $('#similar-list'),
+    similarMore: $('#similar-more'),
     toggleReferences: $('#toggle-references'),
     referencesContent: $('#references-content'),
     referenceCount: $('#modal-reference-count'),
@@ -2638,6 +2659,8 @@ window.EMBEDDED_INDEX = {"assets/questions/2026a-moed-81-q1-א/question-1.png":"
     els.solutionTextDetails.open = false;
     els.solutionText.replaceChildren();
     els.solutionText.dataset.rendered = '';
+    els.similarList.replaceChildren();
+    els.similarMore.hidden = true;
     els.toggleSolution.textContent = 'הצגת פתרון';
     els.toggleSolution.setAttribute('aria-expanded', 'false');
     if (q.answer_choice) {
@@ -2670,12 +2693,158 @@ window.EMBEDDED_INDEX = {"assets/questions/2026a-moed-81-q1-א/question-1.png":"
     els.randomInModal.disabled = state.nav.ids.length < 2;
   }
 
+  /* Similar-question ranking (ported verbatim into the app). */
+  function buildSimilarity(questions) {
+    const STOP = new Set(['את','של','על','עם','אם','או','כי','גם','לא','כל','זה','זו','הוא','היא','הם','הן','יהי','תהי','יהיו','תהיינה','נתון','נתונה','נתונים','הבאה','הבא','הבאים','הבאות','מעל','שדה','הוכיחו','הוכח','הוכיחי','הפריכו','הפרך','הוכיחו/הפריכו','נמקו','נמק','קבעו','מצאו','מצא','חשבו','חשב','האם','אשר','כך','עבור','לכל','קיים','קיימת','יש','אין','ידי','בין','גם','שאלה','סעיף','נקודות','נק']);
+    const norm = (text) => String(text || '').normalize('NFKC').toLowerCase();
+    function tokens(q) {
+      const text = norm(`${q.prompt || ''}`);
+      const out = [];
+      for (const m of text.matchAll(/[א-ת]{3,}|[a-z]{2,}/gu)) {
+        let w = m[0];
+        if (STOP.has(w)) continue;
+        out.push(w);
+      }
+      return out;
+    }
+    const docs = questions.map((q) => {
+      const tf = new Map();
+      tokens(q).forEach((w) => tf.set(w, (tf.get(w) || 0) + 1));
+      return tf;
+    });
+    const df = new Map();
+    docs.forEach((tf) => tf.forEach((_, w) => df.set(w, (df.get(w) || 0) + 1)));
+    const N = questions.length;
+    const vecs = docs.map((tf) => {
+      const v = new Map();
+      let norm2 = 0;
+      tf.forEach((count, w) => {
+        const d = df.get(w);
+        if (d < 2 || d > N * 0.35) return;
+        const x = (1 + Math.log(count)) * Math.log(N / d);
+        v.set(w, x);
+        norm2 += x * x;
+      });
+      const n = Math.sqrt(norm2) || 1;
+      v.forEach((x, w) => v.set(w, x / n));
+      return v;
+    });
+    const refSets = questions.map((q) => {
+      const exact = new Set();
+      const sections = new Set();
+      (q.references || []).forEach((r) => {
+        if (!r.number) return;
+        exact.add(`${r.kind}:${r.number}`);
+        const sec = String(r.number).split('.').slice(0, 2).join('.');
+        if (sec.includes('.')) sections.add(sec);
+      });
+      return { exact, sections };
+    });
+    const index = new Map(questions.map((q, i) => [q.id, i]));
+
+    function cosine(a, b) {
+      let s = 0;
+      const [small, big] = a.size < b.size ? [a, b] : [b, a];
+      small.forEach((x, w) => { const y = big.get(w); if (y) s += x * y; });
+      return s;
+    }
+    function overlap(a, b) { let n = 0; a.forEach((x) => { if (b.has(x)) n += 1; }); return n; }
+
+    function score(i, j) {
+      const a = questions[i], b = questions[j];
+      const ua = new Set(a.unit_ids || []), ub = new Set(b.unit_ids || []);
+      const sharedUnits = overlap(ua, ub);
+      if (!sharedUnits) return null;
+      const unitJ = sharedUnits / (ua.size + ub.size - sharedUnits);
+      const primary = a.unit_ids?.[0] && a.unit_ids[0] === b.unit_ids?.[0] ? 1 : 0;
+      const ta = new Set(a.tags || []), tb = new Set(b.tags || []);
+      const sharedTags = [...ta].filter((t) => tb.has(t));
+      const ra = refSets[i], rb = refSets[j];
+      const exactRefs = overlap(ra.exact, rb.exact);
+      const sectionRefs = overlap(ra.sections, rb.sections);
+      const text = cosine(vecs[i], vecs[j]);
+      const value = 3 * unitJ + 1 * primary + 1.2 * Math.min(exactRefs, 3) + 0.6 * Math.min(sectionRefs, 3) + 6 * text;
+      return { value, sharedTags, sharedUnits: [...ua].filter((u) => ub.has(u)) };
+    }
+
+    /** Ranked similar questions for `id`: other exam questions only (never a part of the same exam question). */
+    return function similarTo(id) {
+      const i = index.get(id);
+      if (i == null) return [];
+      const q = questions[i];
+      const results = [];
+      questions.forEach((other, j) => {
+        if (j === i) return;
+        if ((other.source_question_id || other.id) === (q.source_question_id || q.id)) return;
+        const s = score(i, j);
+        if (s && s.value > 0) results.push({ q: other, ...s });
+      });
+      results.sort((x, y) => y.value - x.value);
+      return results;
+    };
+  }
+
+  let similarTo = null;
+  const SIMILAR_POOL = 12;
+  const SIMILAR_STEP = 3;
+  let similarShown = 0;
+  let similarRanked = [];
+
+  function similarPreview(q) {
+    return String(q.prompt || '').normalize('NFKC')
+      .replace(/^\s*\(\d+\s*נק[^)]*\)?/u, '')
+      .replace(/\s+/g, ' ').trim().slice(0, 140);
+  }
+
+  function similarCard(item) {
+    const q = item.q;
+    const card = el('button', 'similar-card');
+    card.type = 'button';
+    const top = el('div', 'similar-card-top');
+    top.append(el('span', '', `${q.exam_label} · ${q.question_label}`));
+    if (completed.has(q.id)) top.append(el('span', 'similar-done', '✓ נפתרה'));
+    const chips = el('div', 'chip-row');
+    item.sharedUnits.forEach((unitId) => {
+      const i = (q.unit_ids || []).indexOf(unitId);
+      chips.append(el('span', 'unit-chip', unitLabel(unitId, q.unit_labels?.[i] || '')));
+    });
+    card.append(top, chips, el('div', 'similar-card-preview', similarPreview(q)));
+    card.addEventListener('click', () => {
+      const ids = similarRanked.map((r) => r.q.id);
+      openQuestion(q.id, ids, 'מהשאלות הדומות');
+    });
+    return card;
+  }
+
+  function renderSimilar(reset) {
+    const q = currentQuestion();
+    if (!q) return;
+    if (reset) {
+      if (!similarTo) similarTo = buildSimilarity(questions);
+      // Unsolved questions first, so there is always something new to try.
+      const top = similarTo(q.id).slice(0, SIMILAR_POOL);
+      similarRanked = top.filter((r) => !completed.has(r.q.id)).concat(top.filter((r) => completed.has(r.q.id)));
+      similarShown = 0;
+      els.similarList.replaceChildren();
+    }
+    if (!similarRanked.length) {
+      els.similarList.replaceChildren(el('p', 'similar-empty', 'לא נמצאו שאלות דומות במאגר.'));
+      els.similarMore.hidden = true;
+      return;
+    }
+    const next = similarRanked.slice(similarShown, similarShown + SIMILAR_STEP);
+    els.similarList.append(...next.map(similarCard));
+    similarShown += next.length;
+    els.similarMore.hidden = similarShown >= similarRanked.length;
+  }
+
   function showSolution(show) {
     const q = currentQuestion();
     if (!q) return;
     const visible = typeof show === 'boolean' ? show : els.solution.hidden;
     if (visible && !els.solutionImages.childElementCount) {
       els.solutionImages.append(createDocStack(q.solution_images, `הפתרון המקורי · ${q.question_label}`, { inkFor: { qid: q.id, prefix: 's' } }));
+      renderSimilar(true);
     }
     els.solution.hidden = !visible;
     els.toggleSolution.textContent = visible ? 'הסתרת פתרון' : 'הצגת פתרון';
@@ -3492,6 +3661,7 @@ window.EMBEDDED_INDEX = {"assets/questions/2026a-moed-81-q1-א/question-1.png":"
     els.toggleComplete.addEventListener('click', () => { const q = currentQuestion(); if (q) toggleComplete(q.id); });
     els.randomInModal.addEventListener('click', () => openRandom(state.nav.ids, state.nav.label));
     els.toggleSolution.addEventListener('click', () => showSolution());
+    els.similarMore.addEventListener('click', () => renderSimilar(false));
     els.promptTextDetails.addEventListener('toggle', () => renderFallbackText(els.promptTextDetails, els.promptText, currentQuestion()?.prompt, 'אין טקסט חלופי לשאלה זו.'));
     els.solutionTextDetails.addEventListener('toggle', () => renderFallbackText(els.solutionTextDetails, els.solutionText, currentQuestion()?.solution, 'אין טקסט חלופי לפתרון זה.'));
     els.notes.addEventListener('input', () => {
