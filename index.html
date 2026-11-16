@@ -354,6 +354,31 @@ main { max-width: 1480px; margin: 0 auto; padding: 0 40px 34px; }
 .study-modal, .settings-modal { display: flex; flex-direction: column; width: min(1040px, 100%); max-height: calc(100vh - 36px); max-height: calc(100dvh - 36px); overflow: hidden; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); box-shadow: var(--shadow-lg); }
 .study-modal:focus, .settings-modal:focus, .lightbox-dialog:focus { outline: none; }
 .settings-modal { width: min(600px, 100%); }
+.settings-modal.plan-modal { width: min(820px, 100%); }
+.button-plan { background: #fff; color: var(--hero-a, #101a2b); font-weight: 850; }
+.plan-body { padding: 18px 26px 26px; overflow-y: auto; }
+.plan-rule { padding: 12px 14px; border-radius: 12px; background: var(--accent-soft); color: var(--ink); font-size: .88rem; line-height: 1.65; }
+.plan-days { display: grid; gap: 10px; margin-top: 16px; }
+.plan-day { padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.plan-day.is-today { border: 2px solid var(--accent); box-shadow: 0 8px 22px rgba(47, 91, 240, .14); }
+.plan-day.is-done { background: var(--success-soft); border-color: var(--success-line); }
+.plan-day-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; margin-bottom: 8px; }
+.plan-day-head h3 { margin: 0; font-size: .98rem; }
+.plan-badge { padding: 2px 9px; border-radius: 99px; background: var(--accent); color: var(--on-accent, #fff); font-size: .72rem; font-weight: 850; }
+.plan-badge.is-done { background: var(--success); }
+.plan-note { color: var(--muted); font-size: .8rem; }
+.plan-type { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 8px; padding: 7px 0; border-top: 1px solid var(--line); }
+.plan-type:first-of-type { border-top: 0; }
+.plan-type-open { display: grid; gap: 2px; min-width: 0; padding: 0; border: 0; background: none; color: var(--ink); font: inherit; text-align: start; cursor: pointer; }
+.plan-type-open strong { color: var(--accent-ink); font-size: .9rem; }
+.plan-type-open strong:hover { text-decoration: underline; }
+.plan-type-open small { color: var(--muted); font-size: .76rem; }
+.plan-type.is-quick .plan-type-open strong { font-weight: 650; }
+.plan-streak { padding: 6px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); color: var(--muted); font-size: .76rem; font-weight: 750; white-space: nowrap; }
+.plan-streak.is-done { border-color: var(--success-line); background: var(--success-soft); color: var(--success); }
+.plan-index { margin-top: 22px; }
+#theorem-index { display: block; width: 100%; min-height: 170px; padding: 12px 14px; border: 1px solid var(--control-line); border-radius: 12px; outline: 0; background: var(--surface); color: var(--ink); font: inherit; font-size: .92rem; line-height: 1.7; resize: vertical; }
+#theorem-index:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus); }
 .modal-topbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding: 20px 26px 16px; border-bottom: 1px solid var(--line); }
 .modal-heading { min-width: 0; }
 .modal-topbar .eyebrow { margin-bottom: 6px; }
@@ -663,6 +688,7 @@ body.has-overlay .toast { bottom: calc(92px + env(safe-area-inset-bottom)); }
           <p class="hero-description" id="hero-description">כל השאלות ממבחני הקורס, עם הנוסח והפתרון כפי שהופיעו ב־PDF. הפתרון נשאר מוסתר עד שתבקשו לראות אותו.</p>
         </div>
         <div class="hero-actions">
+          <button class="button button-plan" id="open-plan" type="button">📅 תוכנית השבוע <span class="button-hint" id="open-plan-hint"></span></button>
           <button class="button button-primary" id="random-filtered" type="button">שאלה אקראית <span class="button-hint" id="random-filtered-hint"></span></button>
           <button class="button button-on-dark" id="random-all" type="button">אקראית מכל המאגר</button>
           <button class="button button-on-dark" id="resume" type="button" hidden>המשך מהשאלה האחרונה</button>
@@ -852,6 +878,26 @@ body.has-overlay .toast { bottom: calc(92px + env(safe-area-inset-bottom)); }
   </div>
 
   <!-- Settings & backup -->
+  <div class="overlay settings-overlay" id="plan-modal" hidden>
+    <section class="settings-modal plan-modal" role="dialog" aria-modal="true" aria-labelledby="plan-title" tabindex="-1">
+      <div class="modal-topbar">
+        <div class="modal-heading"><p class="eyebrow">שבוע 1 · 16–22 בנובמבר · לפי סוגי שאלות</p><h2 id="plan-title">תוכנית השבוע</h2></div>
+        <button class="icon-button" id="close-plan" type="button" aria-label="סגירת התוכנית">×</button>
+      </div>
+      <div class="modal-scroll plan-body">
+        <div class="plan-rule">
+          <strong>השיטה לכל סוג:</strong> קוראים 2–3 פתרונות, ואז פותרים לבד עד <strong>2 נכונות ברצף</strong>, ועוברים לסוג הבא.
+          כל משפט שהשתמשתם בו רושמים למטה עם מספר העמוד בספר: המבחן עם חומר פתוח, והאינדקס הזה יחסוך זמן.
+        </div>
+        <div class="plan-days" id="plan-days"></div>
+        <section class="plan-index">
+          <div class="block-heading"><label class="section-label" for="theorem-index">אינדקס משפטים לבחינה</label><span class="block-hint" id="theorem-index-status">נשמר רק במכשיר הזה</span></div>
+          <textarea id="theorem-index" placeholder="שורה לכל משפט, למשל:&#10;משפט 8.5.1 · עמ׳ 212 · ממד של סכום תתי־מרחבים&#10;שאלה 7.5.12 · עמ׳ 181 · מרחב השורות לא משתנה בפעולות שורה"></textarea>
+        </section>
+      </div>
+    </section>
+  </div>
+
   <div class="overlay settings-overlay" id="settings-modal" hidden>
     <section class="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title" tabindex="-1">
       <div class="modal-topbar">
@@ -2007,6 +2053,13 @@ window.EMBEDDED_INDEX = {"assets/questions/2026a-moed-81-q1-א/question-1.png":"
     scratchAddPage: $('#scratch-add-page'),
     themeToggle: $('#theme-toggle'),
     openSettings: $('#open-settings'),
+    openPlan: $('#open-plan'),
+    openPlanHint: $('#open-plan-hint'),
+    planModal: $('#plan-modal'),
+    closePlan: $('#close-plan'),
+    planDays: $('#plan-days'),
+    theoremIndex: $('#theorem-index'),
+    theoremIndexStatus: $('#theorem-index-status'),
     heroDescription: $('#hero-description'),
     randomFiltered: $('#random-filtered'),
     randomFilteredHint: $('#random-filtered-hint'),
@@ -2231,7 +2284,7 @@ window.EMBEDDED_INDEX = {"assets/questions/2026a-moed-81-q1-א/question-1.png":"
     document.body.classList.toggle('has-overlay', Boolean(top));
     els.shell.inert = Boolean(top);
     if (els.skipLink) els.skipLink.inert = Boolean(top);
-    [els.studyModal, els.settingsModal, els.lightbox].forEach((overlay) => {
+    [els.studyModal, els.settingsModal, els.planModal, els.lightbox].forEach((overlay) => {
       overlay.inert = Boolean(top) && overlay !== top && !overlay.hidden;
     });
   }
@@ -2390,6 +2443,122 @@ window.EMBEDDED_INDEX = {"assets/questions/2026a-moed-81-q1-א/question-1.png":"
       fragment.append(button);
     });
     els.patternFilters.replaceChildren(fragment);
+  }
+
+  /* ---------- Week 1 plan ---------- */
+  const WEEK_PLAN = [
+    { dates: ['2026-11-16', '2026-11-17'], title: 'שני–שלישי · 16–17.11', types: ['p01', 'p06'] },
+    { dates: ['2026-11-18', '2026-11-19'], title: 'רביעי–חמישי · 18–19.11', types: ['p02', 'p05'] },
+    { dates: ['2026-11-20'], title: 'שישי · 20.11', types: ['p04'] },
+    { dates: ['2026-11-21'], title: 'שבת · 21.11', types: ['p03'], quick: ['p07', 'p09', 'p11'] },
+    { dates: ['2026-11-22'], title: 'ראשון · 22.11', exam: true },
+  ];
+  const planState = (() => {
+    const stored = load('plan', {}) || {};
+    return { streak: stored.streak && typeof stored.streak === 'object' ? stored.streak : {} };
+  })();
+  const localDate = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  const patternNumber = (id) => pad2(PATTERNS.findIndex((p) => p.id === id) + 1);
+  const patternLabel = (id) => PATTERNS.find((p) => p.id === id)?.label || id;
+
+  function openPattern(id) {
+    hideOverlay(els.planModal);
+    state.filters = { ...DEFAULT_FILTERS, pattern: id };
+    applyFilters();
+    els.grid.scrollIntoView({ block: 'start', behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+  }
+
+  function openExam(id) {
+    hideOverlay(els.planModal);
+    state.filters = { ...DEFAULT_FILTERS, exam: id };
+    applyFilters();
+    els.grid.scrollIntoView({ block: 'start', behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+  }
+
+  /** The newest exam with nothing marked solved yet (falls back to the newest exam). */
+  function suggestedExam() {
+    const exams = (DATA.exams || []).slice().sort((a, b) => recency(b) - recency(a));
+    return exams.find((exam) => !questions.some((q) => q.exam_id === exam.id && completed.has(q.id))) || exams[0];
+  }
+
+  function planTypeRow(id, quick) {
+    const row = el('div', `plan-type${quick ? ' is-quick' : ''}`);
+    const list = questions.filter((q) => patternOf.get(q.id) === id);
+    const solved = list.filter((q) => completed.has(q.id)).length;
+    const open = el('button', 'plan-type-open');
+    open.type = 'button';
+    open.append(el('strong', '', `${patternNumber(id)} · ${patternLabel(id)}`), el('small', '', `${list.length} שאלות · ${solved} פתורות${quick ? ' · מעבר מהיר' : ''}`));
+    open.addEventListener('click', () => openPattern(id));
+    const done = Boolean(planState.streak[id]);
+    const streak = el('button', `plan-streak${done ? ' is-done' : ''}`, done ? '✓ 2 ברצף' : '2 ברצף?');
+    streak.type = 'button';
+    streak.setAttribute('aria-pressed', String(done));
+    streak.title = 'סמנו אחרי שפתרתם לבד 2 שאלות נכונות ברצף מהסוג הזה';
+    streak.addEventListener('click', () => {
+      if (planState.streak[id]) delete planState.streak[id];
+      else planState.streak[id] = new Date().toISOString();
+      save('plan', planState);
+      renderPlan();
+    });
+    const go = el('button', 'button button-soft', 'פתיחה');
+    go.type = 'button';
+    go.addEventListener('click', () => openPattern(id));
+    row.append(open, streak, go);
+    return row;
+  }
+
+  function renderPlan() {
+    const today = localDate();
+    const fragment = document.createDocumentFragment();
+    let todayTitle = '';
+    WEEK_PLAN.forEach((day) => {
+      const isToday = day.dates.includes(today);
+      const allTypes = [...(day.types || []), ...(day.quick || [])];
+      const isDone = !day.exam && allTypes.every((id) => planState.streak[id]);
+      const card = el('article', `plan-day${isToday ? ' is-today' : ''}${isDone ? ' is-done' : ''}`);
+      const head = el('div', 'plan-day-head');
+      head.append(el('h3', '', day.title));
+      if (isToday) head.append(el('span', 'plan-badge', 'היום'));
+      if (isDone) head.append(el('span', 'plan-badge is-done', '✓ הושלם'));
+      card.append(head);
+      (day.types || []).forEach((id) => card.append(planTypeRow(id, false)));
+      (day.quick || []).forEach((id) => card.append(planTypeRow(id, true)));
+      if (day.exam) {
+        const exam = suggestedExam();
+        card.append(el('p', 'plan-note', 'מבחן מעורב אחד, בלי חלוקה לפי סוג. פותרים ברצף כמו בבחינה, ורק אז בודקים.'));
+        if (exam) {
+          const row = el('div', 'plan-type');
+          const open = el('button', 'plan-type-open');
+          open.type = 'button';
+          open.append(el('strong', '', `מבחן שלם · ${exam.label}`), el('small', '', 'המבחן החדש ביותר שעוד לא סימנתם בו שאלות'));
+          open.addEventListener('click', () => openExam(exam.id));
+          const go = el('button', 'button button-soft', 'פתיחה');
+          go.type = 'button';
+          go.addEventListener('click', () => openExam(exam.id));
+          row.append(open, el('span'), go);
+          card.append(row);
+        }
+      }
+      if (isToday) todayTitle = day.exam ? 'מבחן שלם' : (day.types || []).map(patternNumber).join(' + ');
+      fragment.append(card);
+    });
+    els.planDays.replaceChildren(fragment);
+    els.openPlanHint.textContent = todayTitle ? `· היום: ${todayTitle}` : '';
+  }
+
+  function openPlan() {
+    renderPlan();
+    els.theoremIndex.value = load('theorem-index', '') || '';
+    showOverlay(els.planModal);
+  }
+
+  let theoremTimer = 0;
+  function saveTheoremIndex() {
+    save('theorem-index', els.theoremIndex.value);
+    els.theoremIndexStatus.textContent = 'נשמר במכשיר הזה';
   }
 
   function renderUnitFilters() {
@@ -3498,6 +3667,8 @@ window.EMBEDDED_INDEX = {"assets/questions/2026a-moed-81-q1-א/question-1.png":"
       completed: [...completed].sort(),
       notes: { ...notes },
       ink: ink ? ink.exportAll() : {},
+      plan: load('plan', {}) || {},
+      theorem_index: load('theorem-index', '') || '',
       summary: { completed: known.length, notes: Object.keys(notes).length, ink: ink ? ink.questionsWithInk().length : 0, questions: questions.length },
     };
   }
@@ -3599,6 +3770,19 @@ window.EMBEDDED_INDEX = {"assets/questions/2026a-moed-81-q1-א/question-1.png":"
       toast('זה לא נראה כמו גיבוי התקדמות תקין');
       return;
     }
+    let raw = {};
+    try { raw = JSON.parse(String(text || '').trim()) || {}; } catch { raw = {}; }
+    const importedIndex = typeof raw.theorem_index === 'string' ? raw.theorem_index.trim() : '';
+    const localIndex = String(load('theorem-index', '') || '');
+    if (importedIndex && !localIndex.includes(importedIndex)) {
+      save('theorem-index', localIndex.trim() ? `${localIndex.trim()}\n${importedIndex}` : importedIndex);
+      toast('אינדקס המשפטים יובא');
+    }
+    if (raw.plan && typeof raw.plan.streak === 'object') {
+      Object.entries(raw.plan.streak).forEach(([id, when]) => { if (!planState.streak[id] && typeof when === 'string') planState.streak[id] = when; });
+      save('plan', planState);
+      renderPlan();
+    }
     const newCompleted = parsed.completed.filter((id) => byId.has(id) && !completed.has(id));
     const noteIds = Object.keys(parsed.notes).filter((id) => byId.has(id));
     const skipped = parsed.completed.filter((id) => !byId.has(id)).length + Object.keys(parsed.notes).filter((id) => !byId.has(id)).length;
@@ -3697,7 +3881,7 @@ window.EMBEDDED_INDEX = {"assets/questions/2026a-moed-81-q1-א/question-1.png":"
       }
       return;
     }
-    if (overlay === els.settingsModal) {
+    if (overlay === els.settingsModal || overlay === els.planModal) {
       if (event.key === 'Escape') {
         event.preventDefault();
         hideOverlay(overlay);
@@ -3790,6 +3974,15 @@ window.EMBEDDED_INDEX = {"assets/questions/2026a-moed-81-q1-א/question-1.png":"
     els.toggleReferences.addEventListener('click', () => showReferences(els.referencesContent.hidden, { scroll: true }));
 
     els.openSettings.addEventListener('click', () => { updateBackupStatus(); showOverlay(els.settingsModal); });
+    els.openPlan.addEventListener('click', openPlan);
+    els.closePlan.addEventListener('click', () => hideOverlay(els.planModal));
+    closeOnBackdrop(els.planModal, () => hideOverlay(els.planModal));
+    els.theoremIndex.addEventListener('input', () => {
+      els.theoremIndexStatus.textContent = 'שומר…';
+      window.clearTimeout(theoremTimer);
+      theoremTimer = window.setTimeout(saveTheoremIndex, 400);
+    });
+    els.theoremIndex.addEventListener('blur', saveTheoremIndex);
     els.closeSettings.addEventListener('click', () => hideOverlay(els.settingsModal));
     closeOnBackdrop(els.settingsModal, () => hideOverlay(els.settingsModal));
     document.querySelectorAll('input[name="theme"]').forEach((input) => input.addEventListener('change', () => { settings.theme = input.value; saveSettings(); }));
@@ -4101,6 +4294,7 @@ window.EMBEDDED_INDEX = {"assets/questions/2026a-moed-81-q1-א/question-1.png":"
     }
     populateSelects();
     renderPatternFilters();
+    renderPlan();
     renderUnitFilters();
     renderTopicFilters();
     restoreFilters();
