@@ -275,6 +275,7 @@ main { max-width: 1480px; margin: 0 auto; padding: 0 40px 34px; }
 .filter-row select { width: 100%; height: 40px; padding: 0 10px; border: 1px solid var(--control-line); border-radius: 10px; background: var(--surface); color: var(--ink); font-size: .84rem; }
 .filter-row select.is-set, .search-wrap input.is-set { border-color: var(--accent); background: var(--accent-soft); }
 .unit-group { margin-top: 22px; }
+.filter-row .filter-wide { grid-column: 1 / -1; }
 .label-row { align-items: baseline; }
 .label-row span:last-child { color: var(--muted); font-size: .74rem; }
 .unit-filters { display: grid; gap: 4px; margin-top: 8px; }
@@ -700,7 +701,13 @@ body.has-overlay .toast { bottom: calc(92px + env(safe-area-inset-bottom)); }
             <div><label for="year">שנה</label><select id="year"><option value="all">כל השנים</option></select></div>
             <div><label for="semester">סמסטר</label><select id="semester"><option value="all">כל הסמסטרים</option></select></div>
             <div><label for="status">מצב</label><select id="status"><option value="all">הכול</option><option value="unsolved">טרם נפתרו</option><option value="solved">פתורות</option><option value="notes">עם הערות</option><option value="ink">עם כתיבה ביד</option></select></div>
-            <div><label for="qtype">סוג שאלה</label><select id="qtype"><option value="all">כל הסוגים</option></select></div>
+            <div><label for="qtype">פורמט</label><select id="qtype"><option value="all">פתוחות ורב־ברירה</option></select></div>
+            <div class="filter-wide"><label for="exam">מבחן שלם</label><select id="exam"><option value="all">כל המבחנים</option></select></div>
+          </div>
+
+          <div class="unit-group pattern-group">
+            <div class="label-row"><span class="label-strong" id="pattern-label">סוגי שאלות</span><span id="pattern-count">החדשות קודם</span></div>
+            <div class="unit-filters" id="pattern-filters" role="group" aria-labelledby="pattern-label"></div>
           </div>
 
           <div class="unit-group">
@@ -1968,7 +1975,7 @@ window.EMBEDDED_INDEX = {"assets/questions/2026a-moed-81-q1-א/question-1.png":"
     scale: storedSettings.scale === 'large' ? 'large' : 'normal',
   };
 
-  const DEFAULT_FILTERS = { query: '', year: 'all', semester: 'all', status: 'all', type: 'all', unit: 'all', topic: 'all' };
+  const DEFAULT_FILTERS = { query: '', year: 'all', semester: 'all', status: 'all', type: 'all', exam: 'all', pattern: 'all', unit: 'all', topic: 'all' };
   const state = {
     filters: { ...DEFAULT_FILTERS },
     filtered: [],
@@ -2019,6 +2026,9 @@ window.EMBEDDED_INDEX = {"assets/questions/2026a-moed-81-q1-א/question-1.png":"
     status: $('#status'),
     type: $('#qtype'),
     unitFilters: $('#unit-filters'),
+    patternFilters: $('#pattern-filters'),
+    patternCount: $('#pattern-count'),
+    exam: $('#exam'),
     unitCount: $('#unit-count'),
     topicsDetails: $('#topics-details'),
     topicFilters: $('#topic-filters'),
@@ -2318,6 +2328,68 @@ window.EMBEDDED_INDEX = {"assets/questions/2026a-moed-81-q1-א/question-1.png":"
     const types = new Map();
     questions.forEach((q) => { if (!types.has(q.type)) types.set(q.type, q.type_label || q.type); });
     types.forEach((label, value) => els.type.append(new Option(label, value)));
+    (DATA.exams || []).slice().sort((a, b) => recency(b) - recency(a)).forEach((exam) => {
+      els.exam.append(new Option(exam.label || exam.id, exam.id));
+    });
+  }
+
+  /* ---------- Question types (recurring exam patterns) ---------- */
+  const PATTERNS = [
+    { id: 'p01', label: 'בסיס, ממד, תלות לינארית ו־Sp' },
+    { id: 'p02', label: 'הוכחות על מטריצות: זהויות, הפיכות, דרגה ועקבה' },
+    { id: 'p03', label: 'העתקות: גרעין, תמונה, ממדים, חח״ע ועל' },
+    { id: 'p04', label: 'ערכים עצמיים, לכסון ומטריצות דומות' },
+    { id: 'p05', label: 'מטריצה מייצגת ומעבר בסיס' },
+    { id: 'p06', label: 'סכום, חיתוך וסכום ישר של תתי־מרחבים' },
+    { id: 'p07', label: 'דטרמיננטות: חישוב ותכונות' },
+    { id: 'p08', label: 'רב־ברירה (2022)' },
+    { id: 'p09', label: 'מערכת משוואות או דרגה עם פרמטר' },
+    { id: 'p10', label: 'מכפלה סקלרית ואורתוגונליות' },
+    { id: 'p11', label: 'הוכחה או הפרכה שקבוצה היא תת־מרחב' },
+    { id: 'p12', label: 'מספרים מרוכבים ואחר' },
+  ];
+  const PATTERN_RULES = [
+    ['p08', (q) => q.type === 'multiple_choice'],
+    ['p12', (q, t) => /\bz\b|cis|מספרים המרוכבים|שורשי היחידה/.test(t) && !/מטריצ|העתק|מרחב/.test(t)],
+    ['p10', (q, t) => /סקלרית|אורתוגונ|אורתונורמ/.test(t)],
+    ['p04', (q, t) => /עצמי|לכסינ|אופייני|דומות|דומה ל/.test(t)],
+    ['p05', (q, t) => /\[ ?T ?\]|מייצגת|מטריצת המעבר|מעבר מבסיס/.test(t)],
+    ['p03', (q, t) => /העתק/.test(t)],
+    ['p09', (q, t) => /(מערכת|פתרונות|ρ|דרג)/.test(t) && /(ערכי|ערך|פרמטר|עבורם|עבור אילו|לכל [a-zk]\b)/.test(t)],
+    ['p06', (q, t) => /∩|סכום ישר|⊕|\+ ?[UVW]\b/.test(t)],
+    ['p01', (q, t) => /בסיס|dim|ממד|Sp|תלוי|פורש|פורשת/.test(t)],
+    ['p11', (q, t) => /תת[- ]?מרחב|מרחב לינארי/.test(t)],
+    ['p07', (q, t) => /det|\|A\||דטרמיננט/.test(t)],
+    ['p02', (q, t) => /מטריצ/.test(t)],
+    ['p09', (q, t) => /מערכת|פתרונות/.test(t)],
+  ];
+  const patternOf = new Map(questions.map((q) => {
+    const text = String(q.prompt || '').normalize('NFKC').replace(/\s+/g, ' ');
+    const rule = PATTERN_RULES.find(([, test]) => test(q, text));
+    return [q.id, rule ? rule[0] : 'p12'];
+  }));
+  const SEMESTER_ORDER = { a: 1, b: 2, c: 3 };
+  const recency = (q) => (Number(q.year) || 0) * 10 + (SEMESTER_ORDER[q.semester] || 0);
+
+  function renderPatternFilters() {
+    const fragment = document.createDocumentFragment();
+    PATTERNS.forEach((pattern, i) => {
+      const total = questions.filter((q) => patternOf.get(q.id) === pattern.id).length;
+      const button = el('button', 'unit-filter');
+      button.type = 'button';
+      button.dataset.pattern = pattern.id;
+      button.setAttribute('aria-pressed', 'false');
+      button.append(el('span', 'unit-number', pad2(i + 1)), el('span', 'unit-name', pattern.label), el('small', 'unit-count', String(total)));
+      const bar = el('span', 'unit-bar');
+      bar.append(el('span'));
+      button.append(bar);
+      button.addEventListener('click', () => {
+        state.filters.pattern = state.filters.pattern === pattern.id ? 'all' : pattern.id;
+        applyFilters();
+      });
+      fragment.append(button);
+    });
+    els.patternFilters.replaceChildren(fragment);
   }
 
   function renderUnitFilters() {
@@ -2367,6 +2439,8 @@ window.EMBEDDED_INDEX = {"assets/questions/2026a-moed-81-q1-א/question-1.png":"
     if (filters.year !== 'all' && String(q.year) !== filters.year) return false;
     if (filters.semester !== 'all' && q.semester !== filters.semester) return false;
     if (filters.type !== 'all' && q.type !== filters.type) return false;
+    if (filters.exam !== 'all' && q.exam_id !== filters.exam) return false;
+    if (filters.pattern !== 'all' && patternOf.get(q.id) !== filters.pattern) return false;
     if (filters.unit !== 'all' && !(q.unit_ids || []).includes(filters.unit)) return false;
     if (filters.topic !== 'all' && !(q.tags || []).includes(filters.topic)) return false;
     if (filters.status === 'solved' && !completed.has(q.id)) return false;
@@ -2385,6 +2459,7 @@ window.EMBEDDED_INDEX = {"assets/questions/2026a-moed-81-q1-א/question-1.png":"
     const tokens = normalize(state.filters.query).split(' ').filter(Boolean)
       .map((token) => (/^\d+$/.test(token) ? new RegExp(`(?:^|\\D)${token}(?!\\d)`) : token));
     state.filtered = questions.filter((q) => matchesFilters(q, state.filters, tokens));
+    if (state.filters.pattern !== 'all') state.filtered.sort((a, b) => recency(b) - recency(a));
     if (!keepVisible) state.visible = PAGE_SIZE;
     syncFilterControls();
     renderGrid();
@@ -2398,13 +2473,20 @@ window.EMBEDDED_INDEX = {"assets/questions/2026a-moed-81-q1-א/question-1.png":"
     els.semester.value = f.semester;
     els.status.value = f.status;
     els.type.value = f.type;
-    [els.year, els.semester, els.status, els.type].forEach((select) => select.classList.toggle('is-set', select.value !== 'all'));
+    els.exam.value = f.exam;
+    [els.year, els.semester, els.status, els.type, els.exam].forEach((select) => select.classList.toggle('is-set', select.value !== 'all'));
     els.search.classList.toggle('is-set', Boolean(f.query.trim()));
     [...els.unitFilters.children].forEach((button) => {
       const active = button.dataset.unit === f.unit;
       button.classList.toggle('is-active', active);
       button.setAttribute('aria-pressed', String(active));
     });
+    [...els.patternFilters.children].forEach((button) => {
+      const active = button.dataset.pattern === f.pattern;
+      button.classList.toggle('is-active', active);
+      button.setAttribute('aria-pressed', String(active));
+    });
+    els.patternCount.textContent = f.pattern !== 'all' ? 'מהחדשה לישנה' : 'החדשות קודם';
     [...els.topicFilters.children].forEach((button) => {
       const active = button.dataset.topic === f.topic;
       button.classList.toggle('is-active', active);
@@ -2431,7 +2513,9 @@ window.EMBEDDED_INDEX = {"assets/questions/2026a-moed-81-q1-א/question-1.png":"
     if (f.year !== 'all') chips.push(['year', `שנה: ${f.year}`]);
     if (f.semester !== 'all') chips.push(['semester', optionText(els.semester)]);
     if (f.status !== 'all') chips.push(['status', `מצב: ${optionText(els.status)}`]);
-    if (f.type !== 'all') chips.push(['type', `סוג: ${optionText(els.type)}`]);
+    if (f.type !== 'all') chips.push(['type', `פורמט: ${optionText(els.type)}`]);
+    if (f.exam !== 'all') chips.push(['exam', `מבחן: ${optionText(els.exam)}`]);
+    if (f.pattern !== 'all') chips.push(['pattern', `סוג: ${PATTERNS.find((p) => p.id === f.pattern)?.label || f.pattern}`]);
     if (f.unit !== 'all') {
       const unit = units.find((item) => item.id === f.unit);
       chips.push(['unit', unit ? unitLabel(unit.id, unit.label) : f.unit]);
@@ -2468,6 +2552,8 @@ window.EMBEDDED_INDEX = {"assets/questions/2026a-moed-81-q1-א/question-1.png":"
     if (valid(els.semester, saved.semester)) next.semester = saved.semester;
     if (valid(els.status, saved.status)) next.status = saved.status;
     if (valid(els.type, saved.type)) next.type = saved.type;
+    if (valid(els.exam, saved.exam)) next.exam = saved.exam;
+    if (saved.pattern === 'all' || PATTERNS.some((p) => p.id === saved.pattern)) next.pattern = saved.pattern || 'all';
     if (saved.unit === 'all' || units.some((unit) => unit.id === saved.unit)) next.unit = saved.unit;
     if (saved.topic === 'all' || questions.some((q) => (q.tags || []).includes(saved.topic))) next.topic = saved.topic;
     state.filters = next;
@@ -2592,6 +2678,13 @@ window.EMBEDDED_INDEX = {"assets/questions/2026a-moed-81-q1-א/question-1.png":"
     [...els.unitFilters.children].forEach((button) => {
       const id = button.dataset.unit;
       const list = id === 'all' ? questions : questions.filter((q) => (q.unit_ids || []).includes(id));
+      const solved = list.filter((q) => completed.has(q.id)).length;
+      button.querySelector('.unit-count').textContent = solved ? `${solved}/${list.length}` : String(list.length);
+      button.querySelector('.unit-bar span').style.width = list.length ? `${Math.round((solved / list.length) * 100)}%` : '0';
+      button.title = `${list.length} שאלות · ${solved} פתורות`;
+    });
+    [...els.patternFilters.children].forEach((button) => {
+      const list = questions.filter((q) => patternOf.get(q.id) === button.dataset.pattern);
       const solved = list.filter((q) => completed.has(q.id)).length;
       button.querySelector('.unit-count').textContent = solved ? `${solved}/${list.length}` : String(list.length);
       button.querySelector('.unit-bar span').style.width = list.length ? `${Math.round((solved / list.length) * 100)}%` : '0';
@@ -3653,7 +3746,7 @@ window.EMBEDDED_INDEX = {"assets/questions/2026a-moed-81-q1-א/question-1.png":"
       applyFilters();
       if (state.filtered.length === 1) openFromGrid(state.filtered[0].id, els.search);
     });
-    [[els.year, 'year'], [els.semester, 'semester'], [els.status, 'status'], [els.type, 'type']].forEach(([select, key]) => {
+    [[els.year, 'year'], [els.semester, 'semester'], [els.status, 'status'], [els.type, 'type'], [els.exam, 'exam']].forEach(([select, key]) => {
       select.addEventListener('change', () => {
         state.filters[key] = select.value;
         applyFilters();
@@ -4007,6 +4100,7 @@ window.EMBEDDED_INDEX = {"assets/questions/2026a-moed-81-q1-א/question-1.png":"
       els.heroDescription.textContent = `כל ${questions.length} השאלות ממבחני ${years[0]}–${years[years.length - 1]}, מחולקות ל־${units.length} יחידות הקורס. הנוסח והפתרון מוצגים כתמונות המקור מה־PDF, והפתרון נשאר מוסתר עד שתבקשו לראות אותו.`;
     }
     populateSelects();
+    renderPatternFilters();
     renderUnitFilters();
     renderTopicFilters();
     restoreFilters();
